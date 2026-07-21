@@ -1,86 +1,157 @@
-# 🎣 PhishGuard — ML-Based Phishing URL Detection System
+# PhishGuard
 
-> Real-time phishing URL detection powered by machine learning, served via a Flask REST API with an interactive web interface.
+PhishGuard is a Flask application for assessing phishing risk from the lexical and structural characteristics of a URL. It provides single-URL analysis, batch CSV processing, a JSON API, risk explanations, and an optional scikit-learn training pipeline.
 
----
+The application does not visit submitted websites or perform DNS, WHOIS, certificate, or reputation lookups. This keeps analysis deterministic and avoids contacting potentially malicious hosts.
 
-## 🚀 Live Demo
-[PhishGuard on Replit](https://replit.com/@shreyalankaaa/PhishGuard)
+## Capabilities
 
----
+- Extracts more than 30 URL features, including hostname entropy, domain structure, encoding, suspicious terms, IP-based hosts, shortened links, and path depth.
+- Returns a classification, phishing probability, confidence value, and 0–100 risk score.
+- Explains the strongest indicators contributing to a result.
+- Supports CSV uploads and JSON batches of up to 500 URLs.
+- Loads a persisted scikit-learn model when available.
+- Uses a documented heuristic fallback when no trained model is present.
+- Includes security headers, input-size limits, Docker support, tests, and GitHub Actions CI.
 
-## 📌 What It Does
+## Architecture
 
-Phishing attacks account for over 80% of reported security incidents. PhishGuard detects malicious URLs in real-time by extracting 30+ lexical, host-based, and domain-reputation features and classifying them using a trained ML model — before the user ever clicks.
-
----
-
-## 🧠 How It Works
-
-```
-URL Input → Feature Extraction → ML Pipeline → Phishing / Legitimate
-```
-
-1. **Feature Extractor** (`feature_extractor.py`) — extracts URL length, subdomain depth, special character ratio, HTTPS usage, domain age signals, and 25+ more features
-2. **ML Pipeline** (`ml_pipeline.py`) — trains and evaluates classifier; handles preprocessing, SMOTE oversampling for class imbalance
-3. **API Layer** (`api_routes.py`) — Flask REST endpoints serving real-time predictions
-4. **Web Interface** (`templates/`) — clean UI for live URL scanning
-
----
-
-## 📊 Model Performance
-
-| Metric | Score |
-|--------|-------|
-| Accuracy | 97%+ |
-| Precision | High |
-| Recall | High |
-| Dataset | 11,000+ labelled URLs |
-| False Positive Rate | ~2% |
-
-> Update these with your actual metrics from ml_pipeline.py evaluation output.
-
----
-
-## ⚙️ Tech Stack
-
-- **Backend:** Python, Flask
-- **ML:** Scikit-learn, Pandas, NumPy
-- **Feature Engineering:** BeautifulSoup, custom URL parsers
-- **Frontend:** HTML, CSS, JavaScript
-- **Deployment:** Replit
-
----
-
-## 🗂️ Project Structure
-
-```
-MachineLearning-based-Phishing/
-├── app.py                 # Flask application entry point
-├── api_routes.py          # REST API endpoint definitions
-├── feature_extractor.py   # URL feature engineering
-├── ml_pipeline.py         # Model training & evaluation
-├── main.py                # Main runner
-├── models/                # Saved trained models
-├── static/                # CSS, JS assets
-└── templates/             # HTML templates
+```text
+Browser / API client
+        |
+        v
+Flask routes and validation
+        |
+        v
+URL normalization and feature extraction
+        |
+        +-----------------------------+
+        |                             |
+        v                             v
+Persisted ML model             Heuristic fallback
+        |                             |
+        +-------------+---------------+
+                      v
+          Risk score and explanation
 ```
 
----
+## Project structure
 
-## ▶️ Run Locally
+```text
+.
+├── app.py                     # Application factory and security headers
+├── api_routes.py              # Web, batch, health, and prediction endpoints
+├── feature_extractor.py       # Deterministic URL feature engineering
+├── ml_pipeline.py             # Training, persistence, inference, and fallback logic
+├── templates/                 # Server-rendered interface
+├── static/                    # CSS and JavaScript
+├── tests/                     # Route and feature tests
+├── models/                    # Optional persisted model artifacts
+├── .github/workflows/ci.yml   # Automated linting and tests
+├── Dockerfile
+├── docker-compose.yml
+└── pyproject.toml
+```
+
+## Run locally
+
+Python 3.11 or newer is required.
 
 ```bash
-git clone https://github.com/shreyaaaalankaaa/MachineLearning-based-Phishing
+git clone https://github.com/shreyaaaalankaaa/MachineLearning-based-Phishing.git
 cd MachineLearning-based-Phishing
+python -m venv .venv
+```
+
+Activate the environment:
+
+```bash
+# macOS or Linux
+source .venv/bin/activate
+
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+```
+
+Install dependencies and start the server:
+
+```bash
 pip install -r requirements.txt
 python app.py
 ```
-Visit `http://localhost:5000`
 
----
+Open `http://localhost:5000`.
 
-## 👩‍💻 Author
+## Docker
 
-**Shreya Lanka** — B.Tech Cybersecurity, Sri Indu College of Engineering & Technology  
-[LinkedIn](https://www.linkedin.com/in/shreya-lanka-057a0b28a/) • [GitHub](https://github.com/shreyaaaalankaaa)
+```bash
+docker compose up --build
+```
+
+The application will be available at `http://localhost:5000`.
+
+## API
+
+### Single prediction
+
+```bash
+curl -X POST http://localhost:5000/api/predict \
+  -H "Content-Type: application/json" \
+  -d '{"url":"http://198.51.100.42/verify-account/login"}'
+```
+
+### Batch prediction
+
+```bash
+curl -X POST http://localhost:5000/api/predict/batch \
+  -H "Content-Type: application/json" \
+  -d '{"urls":["https://github.com","http://198.51.100.42/login"]}'
+```
+
+### Health check
+
+```bash
+curl http://localhost:5000/api/health
+```
+
+Additional examples are available at `/docs` when the application is running.
+
+## Training a model
+
+The training pipeline accepts labeled URLs directly from Python:
+
+```python
+from ml_pipeline import pipeline
+
+metadata = pipeline.train_model(
+    urls=["https://example.com", "http://198.51.100.10/verify"],
+    labels=[0, 1],
+)
+print(metadata)
+```
+
+A practical training dataset should contain substantially more samples, both classes, realistic class balance, and a documented source. The pipeline compares logistic regression and random forest models through stratified cross-validation, selects the strongest F1 result, evaluates it on a holdout split, and stores the final model under `models/`.
+
+This repository intentionally does not claim a benchmark accuracy because no canonical dataset is bundled. Metrics depend on the dataset used for training and should be reported alongside its source, split strategy, and limitations.
+
+## Testing
+
+```bash
+pip install pytest ruff
+ruff check .
+pytest -q
+```
+
+## Security and limitations
+
+PhishGuard evaluates URL text only. It cannot verify page content, redirects, domain ownership, certificate history, hosting reputation, or newly registered domains. HTTPS is not treated as proof of legitimacy, and a low score does not guarantee safety.
+
+Do not use this project as the sole basis for blocking access, reporting a domain, or making high-impact security decisions. A production system should combine lexical analysis with reputation feeds, DNS and registration signals, page-content analysis, sandboxing, monitoring, and human review.
+
+## Author
+
+**Shreya Lanka**  
+Cybersecurity undergraduate interested in security engineering, machine learning, and software development.
+
+- GitHub: `shreyaaaalankaaa`
+- LinkedIn: `shreya-lanka-057a0b28a`

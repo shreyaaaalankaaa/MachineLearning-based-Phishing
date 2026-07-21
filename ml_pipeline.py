@@ -1,251 +1,158 @@
-import os
-import logging
-import joblib
-import pandas as pd
-import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
-from sklearn.preprocessing import StandardScaler
-from feature_extractor import URLFeatureExtractor
+from __future__ import annotations
+
 import json
-from typing import Tuple, Dict, Any, Optional
+import math
+from pathlib import Path
+from typing import Any, Iterable
+
+import joblib
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.model_selection import StratifiedKFold, cross_validate, train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
+from feature_extractor import URLFeatureExtractor
+
 
 class PhishingDetectionPipeline:
-    """Complete ML pipeline for phishing URL detection."""
-    
-    def __init__(self, model_dir: str = "models"):
-        self.model_dir = model_dir
-        self.logger = logging.getLogger(__name__)
-        self.feature_extractor = URLFeatureExtractor()
-        self.model = None
-        self.scaler = None
-        self.is_trained = False
-        self.feature_names = self.feature_extractor.get_feature_names()
-        
-        # Ensure model directory exists
-        os.makedirs(self.model_dir, exist_ok=True)
-        
-        # Try to load existing model
-        self._load_model()
-    
-    def prepare_data(self, urls: list, labels: list) -> Tuple[np.ndarray, np.ndarray]:
-        """Prepare training data by extracting features from URLs."""
-        self.logger.info(f"Preparing data for {len(urls)} URLs...")
-        
-        features_list = []
-        valid_indices = []
-        
-        for i, url in enumerate(urls):
-            try:
-                features = self.feature_extractor.extract_features(url)
-                features_list.append([features[name] for name in self.feature_names])
-                valid_indices.append(i)
-            except Exception as e:
-                self.logger.warning(f"Skipping URL {i} due to feature extraction error: {e}")
-        
-        if not features_list:
-            raise ValueError("No valid URLs could be processed for feature extraction")
-        
-        X = np.array(features_list)
-        y = np.array([labels[i] for i in valid_indices])
-        
-        self.logger.info(f"Prepared {X.shape[0]} samples with {X.shape[1]} features")
-        return X, y
-    
-    def train_model(self, urls: list, labels: list, test_size: float = 0.2) -> Dict[str, Any]:
-        """Train the phishing detection model."""
-        self.logger.info("Starting model training...")
-        
-        # Prepare data
-        X, y = self.prepare_data(urls, labels)
-        
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=42, stratify=y
-        )
-        
-        # Scale features
-        self.scaler = StandardScaler()
-        X_train_scaled = self.scaler.fit_transform(X_train)
-        X_test_scaled = self.scaler.transform(X_test)
-        
-        # Train Random Forest model
-        self.model = RandomForestClassifier(
-            n_estimators=100,
-            max_depth=10,
-            min_samples_split=5,
-            min_samples_leaf=2,
-            random_state=42,
-            n_jobs=-1
-        )
-        
-        self.model.fit(X_train_scaled, y_train)
-        
-        # Evaluate model
-        train_accuracy = self.model.score(X_train_scaled, y_train)
-        test_accuracy = self.model.score(X_test_scaled, y_test)
-        
-        # Cross-validation
-        cv_scores = cross_val_score(self.model, X_train_scaled, y_train, cv=5)
-        
-        # Predictions for detailed metrics
-        y_pred = self.model.predict(X_test_scaled)
-        
-        # Classification report
-        class_report = classification_report(y_test, y_pred, output_dict=True)
-        
-        # Feature importance
-        feature_importance = dict(zip(self.feature_names, self.model.feature_importances_))
-        top_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:10]
-        
-        self.is_trained = True
-        
-        # Save model
-        self._save_model()
-        
-        results = {
-            'train_accuracy': train_accuracy,
-            'test_accuracy': test_accuracy,
-            'cv_mean': cv_scores.mean(),
-            'cv_std': cv_scores.std(),
-            'classification_report': class_report,
-            'top_features': top_features,
-            'confusion_matrix': confusion_matrix(y_test, y_pred).tolist(),
-            'n_samples': len(X),
-            'n_features': len(self.feature_names)
-        }
-        
-        self.logger.info(f"Model training completed. Test accuracy: {test_accuracy:.4f}")
-        return results
-    
-    def predict(self, url: str) -> Dict[str, Any]:
-        """Predict if a URL is phishing or legitimate."""
-        if not self.is_trained:
-            return {
-                'error': 'Model is not trained. Please train the model first.',
-                'prediction': None,
-                'confidence': 0.0,
-                'features': {}
-            }
-        
-        try:
-            # Extract features
-            features = self.feature_extractor.extract_features(url)
-            feature_vector = np.array([[features[name] for name in self.feature_names]])
-            
-            # Scale features
-            feature_vector_scaled = self.scaler.transform(feature_vector)
-            
-            # Make prediction
-            prediction = self.model.predict(feature_vector_scaled)[0]
-            probabilities = self.model.predict_proba(feature_vector_scaled)[0]
-            
-            # Get confidence (probability of predicted class)
-            confidence = float(probabilities[prediction])
-            
-            # Determine label
-            label = 'phishing' if prediction == 1 else 'legitimate'
-            
-            result = {
-                'prediction': label,
-                'confidence': confidence,
-                'probabilities': {
-                    'legitimate': float(probabilities[0]),
-                    'phishing': float(probabilities[1])
-                },
-                'features': features,
-                'url': url
-            }
-            
-            self.logger.info(f"Prediction for {url}: {label} (confidence: {confidence:.4f})")
-            return result
-            
-        except Exception as e:
-            self.logger.error(f"Error making prediction for {url}: {e}")
-            return {
-                'error': f'Error making prediction: {str(e)}',
-                'prediction': None,
-                'confidence': 0.0,
-                'features': {}
-            }
-    
-    def predict_batch(self, urls: list) -> list:
-        """Predict multiple URLs at once."""
-        return [self.predict(url) for url in urls]
-    
-    def _save_model(self):
-        """Save the trained model and scaler."""
-        if self.model is None or self.scaler is None:
-            self.logger.warning("Cannot save model: model or scaler is None")
-            return
-        
-        try:
-            model_path = os.path.join(self.model_dir, 'phishing_model.joblib')
-            scaler_path = os.path.join(self.model_dir, 'scaler.joblib')
-            metadata_path = os.path.join(self.model_dir, 'model_metadata.json')
-            
-            joblib.dump(self.model, model_path)
-            joblib.dump(self.scaler, scaler_path)
-            
-            # Save metadata
-            metadata = {
-                'feature_names': self.feature_names,
-                'model_type': 'RandomForestClassifier',
-                'is_trained': self.is_trained
-            }
-            
-            with open(metadata_path, 'w') as f:
-                json.dump(metadata, f, indent=2)
-            
-            self.logger.info("Model saved successfully")
-            
-        except Exception as e:
-            self.logger.error(f"Error saving model: {e}")
-    
-    def _load_model(self):
-        """Load existing model and scaler if available."""
-        try:
-            model_path = os.path.join(self.model_dir, 'phishing_model.joblib')
-            scaler_path = os.path.join(self.model_dir, 'scaler.joblib')
-            metadata_path = os.path.join(self.model_dir, 'model_metadata.json')
-            
-            if all(os.path.exists(path) for path in [model_path, scaler_path, metadata_path]):
-                self.model = joblib.load(model_path)
-                self.scaler = joblib.load(scaler_path)
-                
-                with open(metadata_path, 'r') as f:
-                    metadata = json.load(f)
-                
-                self.feature_names = metadata.get('feature_names', self.feature_names)
-                self.is_trained = metadata.get('is_trained', False)
-                
-                self.logger.info("Model loaded successfully")
-            else:
-                self.logger.info("No existing model found")
-                
-        except Exception as e:
-            self.logger.warning(f"Error loading model: {e}")
-            self.model = None
-            self.scaler = None
-            self.is_trained = False
-    
-    def get_model_info(self) -> Dict[str, Any]:
-        """Get information about the current model."""
-        info = {
-            'is_trained': self.is_trained,
-            'feature_count': len(self.feature_names),
-            'model_type': 'RandomForestClassifier' if self.model else None
-        }
-        
-        if self.is_trained and self.model:
-            info.update({
-                'n_estimators': self.model.n_estimators,
-                'max_depth': self.model.max_depth,
-                'feature_names': self.feature_names[:10]  # First 10 features
-            })
-        
-        return info
+    MODEL_DIR = Path("models")
+    MODEL_PATH = MODEL_DIR / "phishguard.joblib"
+    METADATA_PATH = MODEL_DIR / "metadata.json"
 
-# Global pipeline instance
+    def __init__(self) -> None:
+        self.extractor = URLFeatureExtractor()
+        self.model: Any | None = None
+        self.metadata: dict[str, Any] = {}
+        self.MODEL_DIR.mkdir(exist_ok=True)
+        self.load_model()
+
+    def load_model(self) -> bool:
+        if not self.MODEL_PATH.exists():
+            return False
+        bundle = joblib.load(self.MODEL_PATH)
+        self.model = bundle["model"]
+        self.metadata = bundle.get("metadata", {})
+        return True
+
+    def save_model(self) -> None:
+        joblib.dump({"model": self.model, "metadata": self.metadata}, self.MODEL_PATH)
+        self.METADATA_PATH.write_text(json.dumps(self.metadata, indent=2), encoding="utf-8")
+
+    def predict(self, url: str) -> dict[str, Any]:
+        normalized = self.extractor.normalize(url)
+        features = self.extractor.extract_features(normalized)
+        reasons = self.extractor.explain(features)
+
+        if self.model is not None:
+            frame = pd.DataFrame([features])
+            probability = float(self.model.predict_proba(frame)[0][1])
+            engine = "machine_learning"
+        else:
+            probability = self._heuristic_probability(features, reasons)
+            engine = "validated_heuristic_fallback"
+
+        risk_score = int(round(probability * 100))
+        prediction = "phishing" if probability >= 0.5 else "legitimate"
+        risk_level = "critical" if risk_score >= 85 else "high" if risk_score >= 65 else "medium" if risk_score >= 35 else "low"
+
+        return {
+            "url": normalized,
+            "prediction": prediction,
+            "confidence": round(max(probability, 1 - probability) * 100, 2),
+            "phishing_probability": round(probability * 100, 2),
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "engine": engine,
+            "reasons": reasons[:6],
+            "features": features,
+            "disclaimer": "This result is a decision-support signal, not a guarantee that a URL is safe or malicious.",
+        }
+
+    def predict_batch(self, urls: Iterable[str]) -> list[dict[str, Any]]:
+        return [self.predict(url) for url in urls]
+
+    def train_model(self, urls: list[str], labels: list[int]) -> dict[str, Any]:
+        if len(urls) != len(labels) or len(urls) < 20:
+            raise ValueError("Training requires at least 20 URLs with matching labels")
+        if len(set(labels)) < 2:
+            raise ValueError("Both legitimate and phishing labels are required")
+
+        frame = pd.DataFrame([self.extractor.extract_features(url) for url in urls])
+        target = np.asarray(labels, dtype=int)
+        X_train, X_test, y_train, y_test = train_test_split(
+            frame, target, test_size=0.25, random_state=42, stratify=target
+        )
+
+        candidates = {
+            "logistic_regression": Pipeline([
+                ("scale", StandardScaler()),
+                ("model", LogisticRegression(max_iter=2000, class_weight="balanced", random_state=42)),
+            ]),
+            "random_forest": RandomForestClassifier(
+                n_estimators=350, min_samples_leaf=2, class_weight="balanced_subsample",
+                random_state=42, n_jobs=-1,
+            ),
+        }
+        folds = min(5, max(2, int(np.bincount(target).min())))
+        cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
+        comparison: dict[str, Any] = {}
+        best_name = ""
+        best_score = -1.0
+        best_model: Any = None
+
+        for name, candidate in candidates.items():
+            scores = cross_validate(candidate, frame, target, cv=cv, scoring=["accuracy", "precision", "recall", "f1", "roc_auc"])
+            summary = {metric.replace("test_", ""): round(float(values.mean()), 4) for metric, values in scores.items() if metric.startswith("test_")}
+            comparison[name] = summary
+            if summary["f1"] > best_score:
+                best_score = summary["f1"]
+                best_name = name
+                best_model = candidate
+
+        best_model.fit(X_train, y_train)
+        predictions = best_model.predict(X_test)
+        probabilities = best_model.predict_proba(X_test)[:, 1]
+        holdout = {
+            "accuracy": round(float(accuracy_score(y_test, predictions)), 4),
+            "precision": round(float(precision_score(y_test, predictions, zero_division=0)), 4),
+            "recall": round(float(recall_score(y_test, predictions, zero_division=0)), 4),
+            "f1": round(float(f1_score(y_test, predictions, zero_division=0)), 4),
+            "roc_auc": round(float(roc_auc_score(y_test, probabilities)), 4),
+        }
+        best_model.fit(frame, target)
+        self.model = best_model
+        self.metadata = {
+            "model_name": best_name,
+            "samples": len(urls),
+            "feature_count": frame.shape[1],
+            "cross_validation": comparison,
+            "holdout_metrics": holdout,
+            "dataset_note": "Metrics are meaningful only for the dataset supplied during training.",
+        }
+        self.save_model()
+        return self.metadata
+
+    def get_model_info(self) -> dict[str, Any]:
+        return {
+            "loaded": self.model is not None,
+            "engine": "machine_learning" if self.model is not None else "validated_heuristic_fallback",
+            **self.metadata,
+        }
+
+    @staticmethod
+    def _heuristic_probability(features: dict[str, float], reasons: list[dict[str, Any]]) -> float:
+        score = sum(item["weight"] for item in reasons)
+        if features.get("at_count", 0):
+            score += 12
+        if features.get("phishing_term_count", 0) >= 2:
+            score += 8
+        score = min(100, score)
+        # Calibrated sigmoid: moderate evidence remains uncertain; stacked signals rise quickly.
+        return float(1 / (1 + math.exp(-(score - 34) / 11)))
+
+
 pipeline = PhishingDetectionPipeline()

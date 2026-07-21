@@ -1,309 +1,54 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analysis Results - PhishGuard</title>
-    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Analysis Result | PhishGuard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('index') }}">
-                <i class="fas fa-shield-alt me-2"></i>
-                PhishGuard
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="{{ url_for('api_docs') }}">
-                    <i class="fas fa-book me-1"></i>
-                    API Docs
-                </a>
-            </div>
-        </div>
-    </nav>
-
-    <div class="container mt-4">
-        <!-- Back Button -->
-        <div class="row mb-4">
-            <div class="col">
-                <a href="{{ url_for('index') }}" class="btn btn-secondary">
-                    <i class="fas fa-arrow-left me-2"></i>
-                    Analyze Another URL
-                </a>
-            </div>
-        </div>
-
-        <!-- Results Header -->
-        <div class="row">
-            <div class="col-lg-10 mx-auto">
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h4 class="card-title mb-0">
-                            <i class="fas fa-chart-bar me-2"></i>
-                            Analysis Results
-                        </h4>
-                    </div>
-                    <div class="card-body">
-                        <div class="row align-items-center">
-                            <div class="col-md-8">
-                                <h6 class="text-muted mb-2">Analyzed URL:</h6>
-                                <div class="url-display p-3 bg-dark rounded">
-                                    <code class="text-light">{{ result.url }}</code>
-                                </div>
-                            </div>
-                            <div class="col-md-4 text-center">
-                                {% if result.prediction == 'phishing' %}
-                                    <div class="prediction-badge danger">
-                                        <i class="fas fa-exclamation-triangle fa-3x mb-2"></i>
-                                        <h5 class="text-danger">PHISHING</h5>
-                                        <p class="text-muted mb-0">Potentially Malicious</p>
-                                    </div>
-                                {% else %}
-                                    <div class="prediction-badge success">
-                                        <i class="fas fa-shield-alt fa-3x mb-2"></i>
-                                        <h5 class="text-success">LEGITIMATE</h5>
-                                        <p class="text-muted mb-0">Appears Safe</p>
-                                    </div>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Confidence Score -->
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-body">
-                                <h5 class="card-title">
-                                    <i class="fas fa-percentage me-2"></i>
-                                    Confidence Score
-                                </h5>
-                                <div class="progress mb-3" style="height: 25px;">
-                                    {% set confidence_percent = (result.confidence * 100) | round(1) %}
-                                    <div class="progress-bar 
-                                        {% if result.prediction == 'phishing' %}bg-danger{% else %}bg-success{% endif %}" 
-                                         style="width: {{ confidence_percent }}%">
-                                        {{ confidence_percent }}%
-                                    </div>
-                                </div>
-                                <small class="text-muted">
-                                    Model confidence in the prediction
-                                </small>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-body">
-                                <h5 class="card-title">
-                                    <i class="fas fa-balance-scale me-2"></i>
-                                    Probability Breakdown
-                                </h5>
-                                <div class="mb-2">
-                                    <small class="text-muted">Legitimate:</small>
-                                    <div class="progress mb-1" style="height: 15px;">
-                                        <div class="progress-bar bg-success" 
-                                             style="width: {{ (result.probabilities.legitimate * 100) | round(1) }}%"></div>
-                                    </div>
-                                    <small>{{ (result.probabilities.legitimate * 100) | round(2) }}%</small>
-                                </div>
-                                <div>
-                                    <small class="text-muted">Phishing:</small>
-                                    <div class="progress mb-1" style="height: 15px;">
-                                        <div class="progress-bar bg-danger" 
-                                             style="width: {{ (result.probabilities.phishing * 100) | round(1) }}%"></div>
-                                    </div>
-                                    <small>{{ (result.probabilities.phishing * 100) | round(2) }}%</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Feature Analysis -->
-                <div class="row">
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title mb-0">
-                                    <i class="fas fa-microscope me-2"></i>
-                                    Detailed Feature Analysis
-                                </h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <!-- Basic URL Features -->
-                                    <div class="col-lg-4 mb-4">
-                                        <h6 class="text-primary mb-3">
-                                            <i class="fas fa-info-circle me-2"></i>
-                                            Basic Properties
-                                        </h6>
-                                        <div class="feature-list">
-                                            <div class="feature-item">
-                                                <span class="feature-name">URL Length:</span>
-                                                <span class="feature-value">{{ result.features.url_length }}</span>
-                                            </div>
-                                            <div class="feature-item">
-                                                <span class="feature-name">Domain Length:</span>
-                                                <span class="feature-value">{{ result.features.domain_length }}</span>
-                                            </div>
-                                            <div class="feature-item">
-                                                <span class="feature-name">Path Length:</span>
-                                                <span class="feature-value">{{ result.features.path_length }}</span>
-                                            </div>
-                                            <div class="feature-item">
-                                                <span class="feature-name">Number of Dots:</span>
-                                                <span class="feature-value">{{ result.features.num_dots }}</span>
-                                            </div>
-                                            <div class="feature-item">
-                                                <span class="feature-name">Number of Subdomains:</span>
-                                                <span class="feature-value">{{ result.features.num_subdomains }}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Security Features -->
-                                    <div class="col-lg-4 mb-4">
-                                        <h6 class="text-warning mb-3">
-                                            <i class="fas fa-shield-alt me-2"></i>
-                                            Security Indicators
-                                        </h6>
-                                        <div class="feature-list">
-                                            <div class="feature-item">
-                                                <span class="feature-name">Uses HTTPS:</span>
-                                                <span class="feature-value 
-                                                    {% if result.features.uses_https %}text-success{% else %}text-danger{% endif %}">
-                                                    {% if result.features.uses_https %}Yes{% else %}No{% endif %}
-                                                </span>
-                                            </div>
-                                            <div class="feature-item">
-                                                <span class="feature-name">Is IP Address:</span>
-                                                <span class="feature-value 
-                                                    {% if result.features.is_ip_address %}text-danger{% else %}text-success{% endif %}">
-                                                    {% if result.features.is_ip_address %}Yes{% else %}No{% endif %}
-                                                </span>
-                                            </div>
-                                            <div class="feature-item">
-                                                <span class="feature-name">Shortened URL:</span>
-                                                <span class="feature-value 
-                                                    {% if result.features.is_shortened_url %}text-warning{% else %}text-success{% endif %}">
-                                                    {% if result.features.is_shortened_url %}Yes{% else %}No{% endif %}
-                                                </span>
-                                            </div>
-                                            <div class="feature-item">
-                                                <span class="feature-name">Suspicious TLD:</span>
-                                                <span class="feature-value 
-                                                    {% if result.features.has_suspicious_tld %}text-danger{% else %}text-success{% endif %}">
-                                                    {% if result.features.has_suspicious_tld %}Yes{% else %}No{% endif %}
-                                                </span>
-                                            </div>
-                                            <div class="feature-item">
-                                                <span class="feature-name">Has Port:</span>
-                                                <span class="feature-value">
-                                                    {% if result.features.has_port %}Yes{% else %}No{% endif %}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Content Features -->
-                                    <div class="col-lg-4 mb-4">
-                                        <h6 class="text-info mb-3">
-                                            <i class="fas fa-search me-2"></i>
-                                            Content Analysis
-                                        </h6>
-                                        <div class="feature-list">
-                                            <div class="feature-item">
-                                                <span class="feature-name">Phishing Keywords:</span>
-                                                <span class="feature-value 
-                                                    {% if result.features.has_phishing_keywords %}text-danger{% else %}text-success{% endif %}">
-                                                    {% if result.features.has_phishing_keywords %}Found{% else %}None{% endif %}
-                                                </span>
-                                            </div>
-                                            <div class="feature-item">
-                                                <span class="feature-name">Suspicious Characters:</span>
-                                                <span class="feature-value 
-                                                    {% if result.features.has_suspicious_chars %}text-warning{% else %}text-success{% endif %}">
-                                                    {% if result.features.has_suspicious_chars %}Found{% else %}None{% endif %}
-                                                </span>
-                                            </div>
-                                            <div class="feature-item">
-                                                <span class="feature-name">URL Encoding:</span>
-                                                <span class="feature-value">
-                                                    {% if result.features.has_encoding %}Yes{% else %}No{% endif %}
-                                                </span>
-                                            </div>
-                                            <div class="feature-item">
-                                                <span class="feature-name">Digit Ratio:</span>
-                                                <span class="feature-value">{{ (result.features.digit_ratio * 100) | round(2) }}%</span>
-                                            </div>
-                                            <div class="feature-item">
-                                                <span class="feature-name">Parameters:</span>
-                                                <span class="feature-value">{{ result.features.num_params }}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Risk Assessment -->
-                                <div class="mt-4">
-                                    <div class="alert 
-                                        {% if result.prediction == 'phishing' %}alert-danger{% else %}alert-success{% endif %}">
-                                        <h6 class="alert-heading">
-                                            <i class="fas fa-{% if result.prediction == 'phishing' %}exclamation-triangle{% else %}info-circle{% endif %} me-2"></i>
-                                            Risk Assessment
-                                        </h6>
-                                        {% if result.prediction == 'phishing' %}
-                                            <p class="mb-2">
-                                                This URL exhibits characteristics commonly associated with phishing attacks.
-                                                Exercise extreme caution and avoid entering sensitive information.
-                                            </p>
-                                            <hr>
-                                            <p class="mb-0">
-                                                <strong>Recommendations:</strong>
-                                                Verify the URL through official channels, check for spelling errors,
-                                                and never enter passwords or personal information on suspicious sites.
-                                            </p>
-                                        {% else %}
-                                            <p class="mb-2">
-                                                This URL appears to be legitimate based on our analysis.
-                                                However, always remain vigilant when sharing personal information online.
-                                            </p>
-                                            <hr>
-                                            <p class="mb-0">
-                                                <strong>Note:</strong>
-                                                This analysis is based on URL structure only. Always verify the authenticity
-                                                of websites through multiple sources when handling sensitive data.
-                                            </p>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Action Buttons -->
-                <div class="row mt-4">
-                    <div class="col text-center">
-                        <a href="{{ url_for('index') }}" class="btn btn-primary me-3">
-                            <i class="fas fa-search me-2"></i>
-                            Analyze Another URL
-                        </a>
-                        <button class="btn btn-secondary" onclick="window.print()">
-                            <i class="fas fa-print me-2"></i>
-                            Print Results
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+<header class="site-header"><a class="brand" href="/">PhishGuard</a><a href="/">New scan</a></header>
+<main class="result-layout">
+  <section class="result-summary {{ result.risk_level }}">
+    <div>
+      <p class="eyebrow">Assessment complete</p>
+      <h1>{{ result.risk_level|capitalize }} risk</h1>
+      <p class="url-value">{{ result.url }}</p>
+      <p>{{ result.disclaimer }}</p>
     </div>
+    <div class="score-ring" style="--score: {{ result.risk_score }}">
+      <span>{{ result.risk_score }}</span><small>/100</small>
+    </div>
+  </section>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+  <section class="metrics-grid">
+    <article><span>Classification</span><strong>{{ result.prediction|capitalize }}</strong></article>
+    <article><span>Confidence</span><strong>{{ result.confidence }}%</strong></article>
+    <article><span>Phishing probability</span><strong>{{ result.phishing_probability }}%</strong></article>
+    <article><span>Decision engine</span><strong>{{ result.engine|replace('_',' ')|title }}</strong></article>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading"><p class="eyebrow">Explanation</p><h2>Signals influencing this result</h2></div>
+    {% if result.reasons %}
+      <div class="reason-list">
+      {% for reason in result.reasons %}
+        <div class="reason-row"><span>{{ reason.label }}</span><strong>+{{ reason.weight }}</strong></div>
+      {% endfor %}
+      </div>
+    {% else %}
+      <p>No major lexical risk indicators were detected.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="section-heading"><p class="eyebrow">Feature snapshot</p><h2>Extracted URL characteristics</h2></div>
+    <div class="feature-grid">
+      {% for name, value in result.features.items() %}
+      <div><span>{{ name|replace('_',' ')|title }}</span><strong>{{ '%.3f'|format(value) }}</strong></div>
+      {% endfor %}
+    </div>
+  </section>
+  <div class="actions"><a class="button-link" href="/">Analyze another URL</a><button onclick="window.print()" class="secondary">Print report</button></div>
+</main>
 </body>
 </html>
