@@ -7,3 +7,4 @@ __pycache__/
 models/*.joblib
 models/metadata.json
 .DS_Store
+data.csv

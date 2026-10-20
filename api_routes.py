@@ -60,12 +60,17 @@ def api_batch():
         return _error("'urls' must be a non-empty list")
     if len(urls) > 500:
         return _error("Batch requests are limited to 500 URLs")
-    results = []
+    results: list[dict] = [{} for _ in urls]
+    valid: list[tuple[int, str]] = []
     for index, url in enumerate(urls):
         try:
-            results.append({"index": index, **pipeline.predict(str(url))})
+            pipeline.extractor.normalize(str(url))
+            valid.append((index, str(url)))
         except ValueError as exc:
-            results.append({"index": index, "url": str(url), "error": str(exc)})
+            results[index] = {"index": index, "url": str(url), "error": str(exc)}
+    scored = pipeline.predict_batch([url for _, url in valid])
+    for (index, _), prediction in zip(valid, scored):
+        results[index] = {"index": index, **prediction}
     return jsonify({"success": True, "data": {"count": len(results), "predictions": results}})
 
 
@@ -80,10 +85,15 @@ def batch_upload():
         return render_template("index.html", model_info=pipeline.get_model_info(), error="The CSV must contain a 'url' column."), 400
     if len(rows) > 500:
         return render_template("index.html", model_info=pipeline.get_model_info(), error="CSV uploads are limited to 500 rows."), 400
-    results = []
-    for row in rows:
+    results: list[dict] = [{} for _ in rows]
+    valid: list[tuple[int, str]] = []
+    for index, row in enumerate(rows):
+        url = row.get("url", "")
         try:
-            results.append(pipeline.predict(row.get("url", "")))
+            pipeline.extractor.normalize(url)
+            valid.append((index, url))
         except ValueError as exc:
-            results.append({"url": row.get("url", ""), "prediction": "invalid", "risk_score": 0, "error": str(exc)})
+            results[index] = {"url": url, "prediction": "invalid", "risk_score": 0, "error": str(exc)}
+    for (index, _), prediction in zip(valid, pipeline.predict_batch([url for _, url in valid])):
+        results[index] = prediction
     return render_template("batch_results.html", results=results)

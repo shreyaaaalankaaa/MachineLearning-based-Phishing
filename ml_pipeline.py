@@ -36,7 +36,19 @@ class PhishingDetectionPipeline:
         bundle = joblib.load(self.MODEL_PATH)
         self.model = bundle["model"]
         self.metadata = bundle.get("metadata", {})
+        self._use_single_thread_inference()
         return True
+
+    def _use_single_thread_inference(self) -> None:
+        """Score each request on one thread.
+
+        A Random Forest trained with n_jobs=-1 also predicts with n_jobs=-1, so every request
+        spun up a thread pool across all cores. Under concurrent API load those pools fought
+        over the CPU (and on Windows flooded the console with joblib warnings). The web server
+        already handles requests in parallel, so one thread per prediction is faster overall.
+        """
+        if self.model is not None and hasattr(self.model, "n_jobs"):
+            self.model.n_jobs = 1
 
     def save_model(self) -> None:
         joblib.dump({"model": self.model, "metadata": self.metadata}, self.MODEL_PATH)
@@ -55,6 +67,11 @@ class PhishingDetectionPipeline:
             probability = self._heuristic_probability(features, reasons)
             engine = "validated_heuristic_fallback"
 
+        return self._build_result(normalized, features, reasons, probability, engine)
+
+    @staticmethod
+    def _build_result(normalized: str, features: dict[str, float], reasons: list[dict[str, Any]],
+                      probability: float, engine: str) -> dict[str, Any]:
         risk_score = int(round(probability * 100))
         prediction = "phishing" if probability >= 0.5 else "legitimate"
         risk_level = "critical" if risk_score >= 85 else "high" if risk_score >= 65 else "medium" if risk_score >= 35 else "low"
@@ -73,7 +90,16 @@ class PhishingDetectionPipeline:
         }
 
     def predict_batch(self, urls: Iterable[str]) -> list[dict[str, Any]]:
-        return [self.predict(url) for url in urls]
+        """Score many URLs with one vectorised model call instead of one call per URL."""
+        if self.model is None:
+            return [self.predict(url) for url in urls]
+        normalized = [self.extractor.normalize(url) for url in urls]
+        features = [self.extractor.extract_features(url) for url in normalized]
+        probabilities = self.model.predict_proba(pd.DataFrame(features))[:, 1] if features else []
+        return [
+            self._build_result(url, feats, self.extractor.explain(feats), float(prob), "machine_learning")
+            for url, feats, prob in zip(normalized, features, probabilities)
+        ]
 
     def train_model(self, urls: list[str], labels: list[int]) -> dict[str, Any]:
         if len(urls) != len(labels) or len(urls) < 20:
@@ -125,6 +151,7 @@ class PhishingDetectionPipeline:
         }
         best_model.fit(frame, target)
         self.model = best_model
+        self._use_single_thread_inference()
         self.metadata = {
             "model_name": best_name,
             "samples": len(urls),
