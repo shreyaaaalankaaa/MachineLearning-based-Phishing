@@ -4,7 +4,7 @@ import ipaddress
 import math
 import re
 from collections import Counter
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import parse_qsl, urlparse
 
 
@@ -15,20 +15,20 @@ class URLFeatureExtractor:
     reproducible, and safe to run in local or CI environments.
     """
 
-    SHORTENERS = {
+    SHORTENERS : ClassVar[set[str]] = {
         "bit.ly", "tinyurl.com", "t.co", "goo.gl", "ow.ly", "is.gd",
         "buff.ly", "cutt.ly", "rb.gy", "rebrand.ly",
     }
-    SUSPICIOUS_TLDS = {
+    SUSPICIOUS_TLDS : ClassVar[set[str]] = {
         "zip", "mov", "click", "top", "xyz", "work", "support", "gq",
         "tk", "ml", "ga", "cf", "rest", "cam", "buzz",
     }
-    PHISHING_TERMS = {
+    PHISHING_TERMS  : ClassVar[set[str]] = {
         "login", "signin", "verify", "verification", "secure", "account",
         "update", "confirm", "suspend", "unlock", "password", "credential",
         "wallet", "bank", "billing", "invoice", "payment", "urgent",
     }
-    BRAND_TERMS = {
+    BRAND_TERMS : ClassVar[set[str]] = {
         "paypal", "microsoft", "apple", "google", "amazon", "netflix",
         "instagram", "facebook", "whatsapp", "coinbase", "binance",
     }

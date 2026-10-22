@@ -3,7 +3,10 @@
 Dataset: faizann24/Using-machine-learning-to-detect-malicious-URLs (data/data.csv, ~420K URLs, labels good/bad).
 Usage:  python scripts/evaluate_model.py data.csv --sample 50000
 """
-import argparse, json, sys, time
+import argparse
+import json
+import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -12,7 +15,7 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from sklearn.model_selection import train_test_split
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from ml_pipeline import PhishingDetectionPipeline  # noqa: E402
+from ml_pipeline import PhishingDetectionPipeline
 
 
 def metrics(y, p):

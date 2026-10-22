@@ -4,8 +4,13 @@ Start the API first (same command as the Dockerfile):
     gunicorn --bind 0.0.0.0:5000 --workers 2 --threads 4 app:app
 Then:  python scripts/load_test.py data.csv
 """
-import asyncio, statistics, sys, time
-import httpx, pandas as pd
+import asyncio
+import statistics
+import sys
+import time
+
+import httpx
+import pandas as pd
 
 BASE = "http://localhost:5000"
 urls = pd.read_csv(sys.argv[1])["url"].sample(3000, random_state=7).tolist()

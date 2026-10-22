@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import joblib
 import numpy as np
@@ -72,7 +73,7 @@ class PhishingDetectionPipeline:
     @staticmethod
     def _build_result(normalized: str, features: dict[str, float], reasons: list[dict[str, Any]],
                       probability: float, engine: str) -> dict[str, Any]:
-        risk_score = int(round(probability * 100))
+        risk_score = round(probability * 100)
         prediction = "phishing" if probability >= 0.5 else "legitimate"
         risk_level = "critical" if risk_score >= 85 else "high" if risk_score >= 65 else "medium" if risk_score >= 35 else "low"
 
